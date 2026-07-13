@@ -940,11 +940,6 @@ export default function App() {
                 <X size={24} />
               </button>
 
-              {/* Child crayon style scribble tag */}
-              <div className="text-center text-xs text-yellow-300/85 mb-4 font-bold uppercase tracking-wider select-none animate-pulse">
-                Move your mouse around to tilt and view secret in 3D 🕹
-              </div>
-
               {/* Magnificent interactive 3D Sticky Note Card */}
               <div 
                 className="w-full"
