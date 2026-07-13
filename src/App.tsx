@@ -697,7 +697,7 @@ export default function App() {
             ) : (
               <Plus size={15} className="stroke-[3]" />
             )}
-            <span>{isCreating ? "Writing..." : "Write Secret 📝"}</span>
+            <span>{isCreating ? "Creating..." : "Create"}</span>
           </button>
         </div>
       </header>
