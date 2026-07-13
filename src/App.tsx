@@ -63,7 +63,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"wall" | "vault" | "export">("wall");
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [visibleCount, setVisibleCount] = useState(5);
-  
+  const notesRequestRef = React.useRef(0);
+
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("theme");
     return saved !== "light"; // Defaults to true (dark mode)
@@ -92,13 +93,18 @@ export default function App() {
   }, []);
 
   const loadNotes = async () => {
+    const requestId = ++notesRequestRef.current;
     try {
       const data = await fetchNotes();
-      setNotes(data);
+      if (requestId === notesRequestRef.current) {
+        setNotes(data);
+      }
     } catch (e) {
       console.error(e);
     } finally {
-      setIsLoading(false);
+      if (requestId === notesRequestRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -117,6 +123,7 @@ export default function App() {
     try {
       const newNote = await createNote({ color: randomColor, text: "", location: "" });
       setNotes((currentNotes) => [newNote, ...currentNotes]);
+      await loadNotes();
       // Switch back to Wall if they compose a new note on another tab
       if (activeTab !== "wall") {
         setActiveTab("wall");
