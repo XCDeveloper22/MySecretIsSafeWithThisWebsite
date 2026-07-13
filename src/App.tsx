@@ -75,8 +75,13 @@ export default function App() {
 
   useEffect(() => {
     loadNotes();
-    const timer = setTimeout(() => setShowSplash(false), 2800);
-    return () => clearTimeout(timer);
+    const syncInterval = window.setInterval(loadNotes, 15000);
+    const timer = window.setTimeout(() => setShowSplash(false), 2800);
+
+    return () => {
+      window.clearInterval(syncInterval);
+      window.clearTimeout(timer);
+    };
   }, []);
 
   const loadNotes = async () => {
@@ -104,7 +109,7 @@ export default function App() {
     const randomColor = COLORS[Math.floor(Math.random() * COLORS.length)].className;
     try {
       const newNote = await createNote({ color: randomColor, text: "", location: "" });
-      setNotes([newNote, ...notes]);
+      setNotes((currentNotes) => [newNote, ...currentNotes]);
       // Switch back to Wall if they compose a new note on another tab
       if (activeTab !== "wall") {
         setActiveTab("wall");
@@ -117,14 +122,18 @@ export default function App() {
   };
 
   const handleDeleteNote = async (id: string) => {
-    setNotes(notes.filter((n) => n.id !== id));
-    await deleteNote(id);
+    try {
+      await deleteNote(id);
+      setNotes((currentNotes) => currentNotes.filter((note) => note.id !== id));
+    } catch (err) {
+      console.error("Failed to delete secret note:", err);
+    }
   };
 
   const handleLockNote = async (id: string) => {
     try {
       const updated = await updateNote(id, { isLocked: true });
-      setNotes(notes.map((n) => (n.id === id ? updated : n)));
+      setNotes((currentNotes) => currentNotes.map((note) => (note.id === id ? updated : note)));
       playThumpSound();
     } catch (err) {
       console.error("Failed to lock secret:", err);

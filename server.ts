@@ -23,46 +23,77 @@ async function startServer() {
     await fs.writeFile(DATA_FILE, JSON.stringify(notes, null, 2));
   }
 
+  let noteMutation = Promise.resolve();
+
+  async function mutateNotes<T>(operation: (notes: any[]) => Promise<T> | T): Promise<T> {
+    const mutation = noteMutation.then(async () => {
+      const notes = await getNotes();
+      const result = await operation(notes);
+      await saveNotes(notes);
+      return result;
+    });
+    noteMutation = mutation.then(() => undefined, () => undefined);
+    return mutation;
+  }
+
   app.get("/api/notes", async (req, res) => {
     const notes = await getNotes();
     res.json(notes);
   });
 
   app.post("/api/notes", async (req, res) => {
-    const notes = await getNotes();
-    const newNote = {
-      id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-      text: req.body.text || "",
-      color: req.body.color || "bg-yellow-200",
-      location: req.body.location || "",
-      isLocked: false,
-      createdAt: new Date().toISOString()
-    };
-    notes.push(newNote);
-    await saveNotes(notes);
+    const newNote = await mutateNotes((notes) => {
+      const note = {
+        id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+        text: typeof req.body.text === "string" ? req.body.text : "",
+        color: typeof req.body.color === "string" ? req.body.color : "bg-yellow-200",
+        location: typeof req.body.location === "string" ? req.body.location : "",
+        isLocked: false,
+        createdAt: new Date().toISOString()
+      };
+      notes.push(note);
+      return note;
+    });
     res.json(newNote);
   });
 
   app.put("/api/notes/:id", async (req, res) => {
-    const notes = await getNotes();
-    const index = notes.findIndex((n: any) => n.id === req.params.id);
-    if (index !== -1) {
-      // If note is already locked, they cannot update text or color. They can only lock it.
-      if (notes[index].isLocked && (req.body.text !== undefined || req.body.color !== undefined)) {
-        return res.status(403).json({ error: "This secret is locked and cannot be edited" });
+    const updatedNote = await mutateNotes((notes) => {
+      const index = notes.findIndex((note: any) => note.id === req.params.id);
+      if (index === -1) return null;
+      if (notes[index].isLocked && (req.body.text !== undefined || req.body.color !== undefined || req.body.drawing !== undefined)) {
+        throw new Error("This secret is locked and cannot be edited");
       }
-      notes[index] = { ...notes[index], ...req.body };
-      await saveNotes(notes);
-      res.json(notes[index]);
-    } else {
-      res.status(404).json({ error: "Not found" });
-    }
+
+      const updates = {
+        ...(typeof req.body.text === "string" ? { text: req.body.text } : {}),
+        ...(typeof req.body.color === "string" ? { color: req.body.color } : {}),
+        ...(typeof req.body.location === "string" ? { location: req.body.location } : {}),
+        ...(typeof req.body.drawing === "string" ? { drawing: req.body.drawing } : {}),
+        ...(req.body.isLocked === true ? { isLocked: true } : {})
+      };
+      notes[index] = { ...notes[index], ...updates };
+      return notes[index];
+    }).catch((error) => {
+      if (error instanceof Error && error.message === "This secret is locked and cannot be edited") {
+        return "locked" as const;
+      }
+      throw error;
+    });
+
+    if (updatedNote === "locked") return res.status(403).json({ error: updatedNote });
+    if (!updatedNote) return res.status(404).json({ error: "Not found" });
+    res.json(updatedNote);
   });
 
   app.delete("/api/notes/:id", async (req, res) => {
-    let notes = await getNotes();
-    notes = notes.filter((n: any) => n.id !== req.params.id);
-    await saveNotes(notes);
+    const deleted = await mutateNotes((notes) => {
+      const index = notes.findIndex((note: any) => note.id === req.params.id);
+      if (index === -1) return false;
+      notes.splice(index, 1);
+      return true;
+    });
+    if (!deleted) return res.status(404).json({ error: "Not found" });
     res.json({ success: true });
   });
 
