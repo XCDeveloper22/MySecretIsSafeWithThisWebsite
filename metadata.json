@@ -1,0 +1,6 @@
+{
+  "name": "FreedomWall",
+  "description": "A secure, anonymous sticky note application that syncs across devices using a simple local server file.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
