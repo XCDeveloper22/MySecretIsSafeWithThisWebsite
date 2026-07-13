@@ -1,5 +1,5 @@
-import React, { useState, useRef } from "react";
-import { Trash2, Palette, Clock, Pin, Lock, Check, Maximize2 } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Trash2, Palette, Clock, Pin, Lock, Check, Maximize2, Paintbrush, RotateCcw } from "lucide-react";
 import { Note, ColorOption } from "../types";
 import { updateNote } from "../utils";
 import { motion } from "motion/react";
@@ -19,6 +19,10 @@ export default function StickyNote({ note, onDelete, colors, onLock, onPreview }
   const [color, setColor] = useState(note.color);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [drawingData, setDrawingData] = useState(note.drawing || "");
+  const [drawingColor, setDrawingColor] = useState("#27272a");
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Generate a stable rotation angle based on note ID for a realistic chaotic board look
@@ -31,6 +35,77 @@ export default function StickyNote({ note, onDelete, colors, onLock, onPreview }
   };
 
   const rotateDeg = getRotationAngle(note.id);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !note.drawing) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const image = new Image();
+    image.onload = () => {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    };
+    image.src = note.drawing;
+  }, [note.drawing]);
+
+  const getCanvasPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = event.currentTarget;
+    const bounds = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - bounds.left) / bounds.width) * canvas.width,
+      y: ((event.clientY - bounds.top) / bounds.height) * canvas.height,
+    };
+  };
+
+  const handleDrawingStart = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (note.isLocked) return;
+    const canvas = event.currentTarget;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const point = getCanvasPoint(event);
+    canvas.setPointerCapture(event.pointerId);
+    context.beginPath();
+    context.moveTo(point.x, point.y);
+    context.strokeStyle = drawingColor;
+    context.lineWidth = 5;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    setIsDrawing(true);
+  };
+
+  const handleDrawingMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    const context = event.currentTarget.getContext("2d");
+    if (!context) return;
+    const point = getCanvasPoint(event);
+    context.lineTo(point.x, point.y);
+    context.stroke();
+  };
+
+  const saveDrawing = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || note.isLocked) return;
+    const data = canvas.toDataURL("image/png");
+    setDrawingData(data);
+    updateNote(note.id, { drawing: data });
+  };
+
+  const handleDrawingEnd = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    setIsDrawing(false);
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    saveDrawing();
+  };
+
+  const clearDrawing = () => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context || note.isLocked) return;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    setDrawingData("");
+    updateNote(note.id, { drawing: "" });
+  };
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (note.isLocked) return;
@@ -120,20 +195,35 @@ export default function StickyNote({ note, onDelete, colors, onLock, onPreview }
         </div>
       )}
 
-      {note.isLocked ? (
-        <div className="flex-1 text-zinc-800 text-lg font-medium leading-relaxed select-none break-words whitespace-pre-wrap py-2 pr-1 select-text">
-          {text || <span className="italic text-zinc-400">Empty secret...</span>}
-        </div>
-      ) : (
-        <textarea
-          value={text}
-          onChange={handleTextChange}
-          onBlur={handleBlur}
-          placeholder="Type a secret..."
-          className="flex-1 bg-transparent resize-none outline-none text-zinc-800 placeholder:text-zinc-500/70 text-lg font-medium leading-relaxed"
-          maxLength={300}
-        />
-      )}
+      <div className="flex-1 flex flex-col gap-3">
+        {note.isLocked ? (
+          <div className="text-zinc-800 text-lg font-medium leading-relaxed select-none break-words whitespace-pre-wrap py-2 pr-1 select-text">
+            {text || <span className="italic text-zinc-400">Empty secret...</span>}
+          </div>
+        ) : (
+          <textarea
+            value={text}
+            onChange={handleTextChange}
+            onBlur={handleBlur}
+            placeholder="Type a secret..."
+            className="min-h-24 flex-1 bg-transparent resize-none outline-none text-zinc-800 placeholder:text-zinc-500/70 text-lg font-medium leading-relaxed"
+            maxLength={300}
+          />
+        )}
+
+        {(drawingData || isDrawing) && (
+          <canvas
+            ref={canvasRef}
+            width={640}
+            height={320}
+            onPointerDown={handleDrawingStart}
+            onPointerMove={handleDrawingMove}
+            onPointerUp={handleDrawingEnd}
+            onPointerCancel={handleDrawingEnd}
+            className={`w-full h-32 rounded-md border border-black/10 bg-white/20 touch-none ${note.isLocked ? "pointer-events-none" : "cursor-crosshair"}`}
+          />
+        )}
+      </div>
       
       <div className="mt-4 flex flex-col gap-2.5">
         {/* Timestamp */}
@@ -149,6 +239,33 @@ export default function StickyNote({ note, onDelete, colors, onLock, onPreview }
           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
             {!note.isLocked ? (
               <>
+                <button
+                  onClick={() => setIsDrawing(!isDrawing)}
+                  className={`flex items-center gap-1 p-1.5 text-zinc-700 hover:bg-black/10 rounded-full transition-colors ${isDrawing ? "bg-black/10" : ""}`}
+                  title="Draw on note"
+                >
+                  <Paintbrush size={15} />
+                </button>
+
+                {isDrawing && (
+                  <>
+                    <input
+                      type="color"
+                      value={drawingColor}
+                      onChange={(event) => setDrawingColor(event.target.value)}
+                      className="w-6 h-6 cursor-pointer rounded-full border-0 bg-transparent"
+                      title="Drawing color"
+                    />
+                    <button
+                      onClick={clearDrawing}
+                      className="p-1.5 text-zinc-700 hover:bg-black/10 rounded-full transition-colors"
+                      title="Clear drawing"
+                    >
+                      <RotateCcw size={15} />
+                    </button>
+                  </>
+                )}
+
                 <div className="relative">
                   <button 
                     onClick={() => setShowPalette(!showPalette)}
