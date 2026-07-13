@@ -5,6 +5,7 @@ export interface Note {
   createdAt: string;
   location?: string;
   isLocked?: boolean;
+  drawing?: string;
 }
 
 export type ColorOption = {
