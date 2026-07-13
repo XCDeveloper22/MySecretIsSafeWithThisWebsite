@@ -76,11 +76,18 @@ export default function App() {
   useEffect(() => {
     loadNotes();
     const syncInterval = window.setInterval(loadNotes, 15000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadNotes();
+      }
+    };
     const timer = window.setTimeout(() => setShowSplash(false), 2800);
 
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       window.clearInterval(syncInterval);
       window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 

@@ -18,6 +18,7 @@ async function startServer() {
   const notes = await getNotesCollection();
 
   app.get("/api/notes", async (_req, res) => {
+    res.set("Cache-Control", "no-store");
     const storedNotes = await notes.find({}).sort({ createdAt: -1 }).toArray();
     res.json(storedNotes);
   });
